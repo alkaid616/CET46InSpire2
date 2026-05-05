@@ -1,0 +1,85 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+    <Import Project=".\local.props" Condition="Exists('.\local.props')"/>
+
+    <PropertyGroup>
+
+        <!-- 如果你安装了10.0并遇到问题，改下这里 -->
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>true</ImplicitUsings>
+        <LangVersion>12.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DefaultItemExcludes>packages/**</DefaultItemExcludes>
+        <AppOutputBase>$(MSBuildProjectDirectory)\</AppOutputBase>
+        <PathMap>$(AppOutputBase)=.\</PathMap>
+        <GodotExportPreset>Windows Desktop</GodotExportPreset>
+
+        <!-- 是否打包成 .pck 文件：默认启用；只有测试纯 DLL 逻辑时才用 -p:PackageModPck=false 跳过资源包 -->
+        <PackageModPck Condition="'$(PackageModPck)' == ''">true</PackageModPck>
+        <RunPckExport Condition="'$(RunPckExport)' == '' and '$(PackageModPck)' == 'false'">false</RunPckExport>
+        <RunPckExport Condition="'$(RunPckExport)' == ''">true</RunPckExport>
+
+        <!-- Mod 输出目录：直接指向游戏的 mods 文件夹 -->
+        <ModOutputDir>$(Sts2Dir)\mods\$(MSBuildProjectName)</ModOutputDir>
+        <ModPckPath>$(ModOutputDir)\$(MSBuildProjectName).pck</ModPckPath>
+        <ModPckIntermediateDir>$(MSBuildProjectDirectory)\artifacts\pck-export</ModPckIntermediateDir>
+        <ModPckIntermediatePath>$(ModPckIntermediateDir)\$(MSBuildProjectName).pck</ModPckIntermediatePath>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Diasble architecture mismatch warning; mods are ideally built for all platforms (MSIL)
+             while your local StS2 version will be for your specific platform. -->
+        <NoWarn>$(NoWarn);MSB3270</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 排除不需要编译的文件夹和文件 -->
+        <Compile Remove="sts2\**\*.cs"/>
+        <Compile Remove="SpireMod_CET46InSpire\**\*"/>
+        <EmbeddedResource Remove="sts2\**\*"/>
+        <EmbeddedResource Remove="SpireMod_CET46InSpire\**\*"/>
+        <None Remove="sts2\**\*"/>
+        <None Remove="SpireMod_CET46InSpire\**\*"/>
+
+        <!-- 引用游戏核心库 sts2.dll，Private 设置为 false 表示编译时不复制到输出目录 -->
+        <Reference Include="sts2">
+            <HintPath>$(Sts2DataDir)\sts2.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <!-- 引用补丁库 0Harmony.dll -->
+        <Reference Include="0Harmony">
+            <HintPath>$(Sts2DataDir)\0Harmony.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <PackageReference Include="STS2.RitsuLib" Version="*"/>
+    </ItemGroup>
+
+    <Target Name="EnsureLocalProps" BeforeTargets="PrepareForBuild" Condition="!Exists('.\local.props')">
+        <Error Text="Missing '.\local.props'. Copy '.\local.props.template' to '.\local.props', then update 'Sts2Dir' / 'GodotExe' for your local environment."/>
+    </Target>
+
+    <Target Name="ValidateSts2GameInstall" BeforeTargets="ResolveAssemblyReferences">
+        <Error Condition="!Exists('$(Sts2DataDir)\sts2.dll')" Text="Could not find sts2.dll under '$(Sts2DataDir)'. Set Sts2Dir in local.props."/>
+    </Target>
+
+    <!-- 自动复制生成的 Mod 文件到游戏目录 -->
+    <Target Name="CopyMod" AfterTargets="PostBuildEvent" Condition="'$(RuntimeIdentifier)' == '' And '$(STS2_SKIP_PCK_EXPORT)' != '1'">
+        <Message Text="Copying mod to Slay the Spire 2 mods folder..." Importance="high"/>
+        <MakeDir Directories="$(Sts2Dir)\mods\"/>
+        <MakeDir Directories="$(ModOutputDir)\"/>
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModOutputDir)\"/>
+        <Copy SourceFiles="$(MSBuildProjectName).json" DestinationFolder="$(ModOutputDir)\"/>
+    </Target>
+
+    <!-- 如果 PackageModPck 为 true，则调用 Godot 导出 .pck 资源包。先导出到工作区，再复制到游戏目录，避免 Godot 直接写 Program Files 时误报失败。 -->
+    <Target Name="ExportPCK" AfterTargets="CopyMod" Condition="'$(RunPckExport)' == 'true' And '$(PackageModPck)' != 'false' And '$(RuntimeIdentifier)' == '' And '$(STS2_SKIP_PCK_EXPORT)' != '1'">
+        <Error Condition="'$(GodotExe)' == '' Or !Exists('$(GodotExe)')" Text="Godot executable not found; cannot export required PCK. Set the GodotExe MSBuild property in local.props or use -p:RunPckExport=false only for DLL-only development builds."/>
+        <MakeDir Directories="$(ModPckIntermediateDir)"/>
+        <Delete Files="$(ModPckIntermediatePath)" Condition="Exists('$(ModPckIntermediatePath)')"/>
+        <Exec Command="&quot;$(GodotExe)&quot; --headless --path &quot;$(MSBuildProjectDirectory)&quot; --export-pack &quot;$(GodotExportPreset)&quot; &quot;$(ModPckIntermediatePath)&quot;" EnvironmentVariables="STS2_SKIP_PCK_EXPORT=1" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"/>
+        <Error Condition="!Exists('$(ModPckIntermediatePath)')" Text="Godot export completed without producing $(ModPckIntermediatePath)."/>
+        <Copy SourceFiles="$(ModPckIntermediatePath)" DestinationFiles="$(ModPckPath)"/>
+        <Error Condition="!Exists('$(ModPckPath)')" Text="Godot export completed without producing $(ModPckPath)."/>
+    </Target>
+</Project>

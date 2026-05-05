@@ -1,0 +1,8 @@
+{
+  "CET_QUIZ_RELIC_MODEL.title": "CET之书",
+  "CET_QUIZ_RELIC_MODEL.flavor": "传言其中记满了会让人做噩梦的 CET 词汇。",
+  "CET_QUIZ_RELIC_MODEL.description": "#y{BookFocus}倾向 NL 每当你即将手动打出一张牌时，先回答一道 CET 单词题。该牌的伤害、格挡和关键数值效果按你的答题得分乘算。战斗中右键此遗物可回顾错题。{StatusSuffix}",
+  "JLPT_QUIZ_RELIC_MODEL.title": "JLPT之书",
+  "JLPT_QUIZ_RELIC_MODEL.flavor": "传言其中记满了会让人做噩梦的 JLPT 词汇。",
+  "JLPT_QUIZ_RELIC_MODEL.description": "#y{BookFocus}倾向 NL 每当你即将手动打出一张牌时，先回答一道 JLPT 单词题。该牌的伤害、格挡和关键数值效果按你的答题得分乘算。战斗中右键此遗物可回顾错题。{StatusSuffix}"
+}

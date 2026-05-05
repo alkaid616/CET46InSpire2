@@ -1,0 +1,7 @@
+[gd_resource type="AtlasTexture" load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://images/powers/perfect_ans_power_model.png" id="1_tex"]
+
+[resource]
+atlas = ExtResource("1_tex")
+region = Rect2(0, 0, 84, 84)

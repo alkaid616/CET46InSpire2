@@ -1,0 +1,8 @@
+{
+  "CET_QUIZ_RELIC_MODEL.title": "Book of CET",
+  "CET_QUIZ_RELIC_MODEL.flavor": "Rumor says it contains every CET word worth fearing.",
+  "CET_QUIZ_RELIC_MODEL.description": "#y{BookFocus} Focus NL Before you manually play a card, answer a random CET quiz. That card's damage, block and major numeric effects are multiplied by your score. Right click the relic in combat to review mistakes.{StatusSuffix}",
+  "JLPT_QUIZ_RELIC_MODEL.title": "Book of JLPT",
+  "JLPT_QUIZ_RELIC_MODEL.flavor": "Rumor says it contains every JLPT word worth dreading.",
+  "JLPT_QUIZ_RELIC_MODEL.description": "#y{BookFocus} Focus NL Before you manually play a card, answer a random JLPT quiz. That card's damage, block and major numeric effects are multiplied by your score. Right click the relic in combat to review mistakes.{StatusSuffix}"
+}

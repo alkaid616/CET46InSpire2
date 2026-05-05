@@ -1,0 +1,11 @@
+{
+  "id": "CET46InSpire2",
+  "name": "CET46InSpire2",
+  "author": "Codex",
+  "description": "Harmony-first port of CET46InSpire for Slay the Spire 2.",
+  "version": "0.2.0",
+  "has_pck": true,
+  "has_dll": true,
+  "dependencies": ["STS2-RitsuLib"],
+  "affects_gameplay": true
+}
