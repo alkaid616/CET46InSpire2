@@ -22,8 +22,6 @@
         <!-- Mod 输出目录：直接指向游戏的 mods 文件夹 -->
         <ModOutputDir>$(Sts2Dir)\mods\$(MSBuildProjectName)</ModOutputDir>
         <ModPckPath>$(ModOutputDir)\$(MSBuildProjectName).pck</ModPckPath>
-        <ModPckIntermediateDir>$(MSBuildProjectDirectory)\artifacts\pck-export</ModPckIntermediateDir>
-        <ModPckIntermediatePath>$(ModPckIntermediateDir)\$(MSBuildProjectName).pck</ModPckIntermediatePath>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -72,14 +70,16 @@
         <Copy SourceFiles="$(MSBuildProjectName).json" DestinationFolder="$(ModOutputDir)\"/>
     </Target>
 
-    <!-- 如果 PackageModPck 为 true，则调用 Godot 导出 .pck 资源包。先导出到工作区，再复制到游戏目录，避免 Godot 直接写 Program Files 时误报失败。 -->
+    <!-- 如果 PackageModPck 为 true，则调用 Godot 直接导出 .pck 资源包到游戏 mods 目录 -->
     <Target Name="ExportPCK" AfterTargets="CopyMod" Condition="'$(RunPckExport)' == 'true' And '$(PackageModPck)' != 'false' And '$(RuntimeIdentifier)' == '' And '$(STS2_SKIP_PCK_EXPORT)' != '1'">
         <Error Condition="'$(GodotExe)' == '' Or !Exists('$(GodotExe)')" Text="Godot executable not found; cannot export required PCK. Set the GodotExe MSBuild property in local.props or use -p:RunPckExport=false only for DLL-only development builds."/>
-        <MakeDir Directories="$(ModPckIntermediateDir)"/>
-        <Delete Files="$(ModPckIntermediatePath)" Condition="Exists('$(ModPckIntermediatePath)')"/>
-        <Exec Command="&quot;$(GodotExe)&quot; --headless --path &quot;$(MSBuildProjectDirectory)&quot; --export-pack &quot;$(GodotExportPreset)&quot; &quot;$(ModPckIntermediatePath)&quot;" EnvironmentVariables="STS2_SKIP_PCK_EXPORT=1" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"/>
-        <Error Condition="!Exists('$(ModPckIntermediatePath)')" Text="Godot export completed without producing $(ModPckIntermediatePath)."/>
-        <Copy SourceFiles="$(ModPckIntermediatePath)" DestinationFiles="$(ModPckPath)"/>
+        <Exec Command="&quot;$(GodotExe)&quot; --headless --path &quot;$(MSBuildProjectDirectory)&quot; --export-pack &quot;$(GodotExportPreset)&quot; &quot;$(ModPckPath)&quot;" EnvironmentVariables="STS2_SKIP_PCK_EXPORT=1" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"/>
         <Error Condition="!Exists('$(ModPckPath)')" Text="Godot export completed without producing $(ModPckPath)."/>
+    </Target>
+
+    <!-- 将 mod 打包为 zip 放到 mods 目录 -->
+    <Target Name="PackageModZip" AfterTargets="ExportPCK" Condition="'$(RuntimeIdentifier)' == '' And '$(STS2_SKIP_PCK_EXPORT)' != '1'">
+        <ZipDirectory SourceDirectory="$(ModOutputDir)" DestinationFile="$(Sts2Dir)\mods\$(MSBuildProjectName).zip" Overwrite="true"/>
+        <Message Text="Mod packaged to $(Sts2Dir)\mods\$(MSBuildProjectName).zip" Importance="high"/>
     </Target>
 </Project>
