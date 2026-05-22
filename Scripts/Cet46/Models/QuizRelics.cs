@@ -211,7 +211,7 @@ public abstract class QuizRelicModel : RelicModel
     /// <summary>
     /// 回合结束时清空持续分数，保持“本回合内持续倍率”的设计。
     /// </summary>
-    public override Task BeforeTurnEnd(PlayerChoiceContext choiceContext, CombatSide side)
+    public override Task BeforeSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
     {
         if (side == CombatSide.Player && LocalContext.IsMe(Owner))
         {
