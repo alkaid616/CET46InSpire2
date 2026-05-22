@@ -22,6 +22,9 @@
         <!-- Mod 输出目录：直接指向游戏的 mods 文件夹 -->
         <ModOutputDir>$(Sts2Dir)\mods\$(MSBuildProjectName)</ModOutputDir>
         <ModPckPath>$(ModOutputDir)\$(MSBuildProjectName).pck</ModPckPath>
+        <!-- 本机测试时 RitsuLib 包/构建逻辑会使用这个目录把 RitsuLib 部署到游戏 mods/STS2-RitsuLib。 -->
+        <!-- Local test builds use this directory when RitsuLib package/build logic deploys RitsuLib to game mods/STS2-RitsuLib. -->
+        <RitsuLibDeployDir Condition="'$(RitsuLibDeployDir)' == ''">$(Sts2Dir)\mods\STS2-RitsuLib</RitsuLibDeployDir>
     </PropertyGroup>
 
     <PropertyGroup>
