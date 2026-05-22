@@ -62,6 +62,26 @@ dotnet build CET46InSpire2.csproj
 dotnet build CET46InSpire2.csproj -p:RunPckExport=false
 ```
 
+## GitHub Release 自动发布
+
+仓库包含 GitHub Actions 发布流程：`.github/workflows/release.yml`。推送 `v*` 标签或手动运行 `GitHub Release` workflow 后，会构建 Release 包、上传构建产物，并创建或更新同名 GitHub Release。
+
+发布前需要在 GitHub 仓库配置以下任一依赖来源：
+
+- 自托管 Windows runner：配置仓库变量 `RELEASE_RUNNER`、`STS2_DIR`、`GODOT_EXE`，可选配置 `STS2_DATA_DIR`。
+- GitHub 托管 runner：配置 secret `STS2_RELEASE_DEPS_URL` 指向私有依赖压缩包，可选配置 `STS2_RELEASE_DEPS_TOKEN`。压缩包中需要包含带有 `sts2.dll` 和 `0Harmony.dll` 的游戏数据目录，以及 MegaDot/Godot 可执行文件。
+
+发版步骤：
+
+```powershell
+# 1. 更新 CET46InSpire2.json 中的 version，例如 1.0.1
+# 2. 提交版本变更
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+Release 资产命名为 `CET46InSpire2-<version>.zip`。workflow 会校验 tag 必须等于 manifest 版本，例如 `version` 为 `1.0.1` 时 tag 必须是 `v1.0.1`。
+
 ## 词库来源
 
 词库来源说明继承自原项目：

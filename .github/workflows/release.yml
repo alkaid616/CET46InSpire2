@@ -1,0 +1,233 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag. Leave empty to use v<manifest version>."
+        required: false
+        type: string
+      prerelease:
+        description: "Mark this release as a prerelease."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  MOD_ID: CET46InSpire2
+  PROJECT_FILE: CET46InSpire2.csproj
+  MANIFEST_FILE: CET46InSpire2.json
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ${{ vars.RELEASE_RUNNER || 'windows-latest' }}
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Read release metadata
+        id: meta
+        env:
+          TAG_INPUT: ${{ github.event.inputs.tag || '' }}
+          PRERELEASE_INPUT: ${{ github.event.inputs.prerelease || 'false' }}
+        run: |
+          $manifest = Get-Content -LiteralPath $env:MANIFEST_FILE -Raw | ConvertFrom-Json
+          $version = [string]$manifest.version
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Missing version in $env:MANIFEST_FILE."
+          }
+
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:TAG_INPUT)) {
+            $tag = $env:TAG_INPUT
+          } else {
+            $tag = "v$version"
+          }
+
+          if (-not $tag.StartsWith("v")) {
+            $tag = "v$tag"
+          }
+
+          $expectedTag = "v$version"
+          if ($tag -ne $expectedTag) {
+            throw "Release tag '$tag' does not match manifest version '$version'. Update $env:MANIFEST_FILE or choose '$expectedTag'."
+          }
+
+          $isPrerelease = ($env:PRERELEASE_INPUT -eq "true") -or $version.Contains("-")
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prerelease=$isPrerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Prepare STS2 and Godot paths
+        id: deps
+        env:
+          STS2_DIR_VAR: ${{ vars.STS2_DIR }}
+          STS2_DATA_DIR_VAR: ${{ vars.STS2_DATA_DIR }}
+          GODOT_EXE_VAR: ${{ vars.GODOT_EXE }}
+          DEPS_URL: ${{ secrets.STS2_RELEASE_DEPS_URL }}
+          DEPS_TOKEN: ${{ secrets.STS2_RELEASE_DEPS_TOKEN }}
+        run: |
+          $depsRoot = Join-Path $env:RUNNER_TEMP "sts2-release-deps"
+          New-Item -ItemType Directory -Path $depsRoot -Force | Out-Null
+
+          $sts2Dir = $env:STS2_DIR_VAR
+          $sts2DataDir = $env:STS2_DATA_DIR_VAR
+          $godotExe = $env:GODOT_EXE_VAR
+
+          if (-not [string]::IsNullOrWhiteSpace($env:DEPS_URL)) {
+            $archivePath = Join-Path $env:RUNNER_TEMP "sts2-release-deps.zip"
+            $headers = @{}
+            if (-not [string]::IsNullOrWhiteSpace($env:DEPS_TOKEN)) {
+              $headers["Authorization"] = "Bearer $env:DEPS_TOKEN"
+            }
+
+            Invoke-WebRequest -Uri $env:DEPS_URL -OutFile $archivePath -Headers $headers
+            Expand-Archive -LiteralPath $archivePath -DestinationPath $depsRoot -Force
+
+            $searchRoots = @((Get-Item -LiteralPath $depsRoot)) + @(Get-ChildItem -LiteralPath $depsRoot -Directory -Recurse)
+            $dataDir = $searchRoots |
+              Where-Object {
+                (Test-Path (Join-Path $_.FullName "sts2.dll")) -and
+                (Test-Path (Join-Path $_.FullName "0Harmony.dll"))
+              } |
+              Select-Object -First 1
+
+            if ($null -eq $dataDir) {
+              throw "Dependency archive must contain a directory with sts2.dll and 0Harmony.dll."
+            }
+
+            $sts2DataDir = $dataDir.FullName
+            $sts2Dir = Split-Path -Parent $sts2DataDir
+
+            if ([string]::IsNullOrWhiteSpace($godotExe)) {
+              $godotCandidate = Get-ChildItem -LiteralPath $depsRoot -Recurse -File -Filter "*.exe" |
+                Where-Object { $_.Name -like "*MegaDot*.exe" -or $_.Name -like "*Godot*.exe" } |
+                Select-Object -First 1
+
+              if ($null -ne $godotCandidate) {
+                $godotExe = $godotCandidate.FullName
+              }
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($sts2Dir)) {
+            throw "Configure repository variables STS2_DIR and GODOT_EXE for a self-hosted runner, or configure secret STS2_RELEASE_DEPS_URL for a hosted runner."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($sts2DataDir)) {
+            $sts2DataDir = Join-Path $sts2Dir "data_sts2_windows_x86_64"
+          }
+
+          if ([string]::IsNullOrWhiteSpace($godotExe)) {
+            throw "Configure GODOT_EXE or include a MegaDot/Godot executable in the dependency archive."
+          }
+
+          if (-not (Test-Path (Join-Path $sts2DataDir "sts2.dll"))) {
+            throw "Could not find sts2.dll under '$sts2DataDir'."
+          }
+
+          if (-not (Test-Path (Join-Path $sts2DataDir "0Harmony.dll"))) {
+            throw "Could not find 0Harmony.dll under '$sts2DataDir'."
+          }
+
+          if (-not (Test-Path $godotExe)) {
+            throw "Could not find Godot executable at '$godotExe'."
+          }
+
+          $localProps = @(
+            "<Project>",
+            "  <PropertyGroup>",
+            "    <Sts2Dir>$([System.Security.SecurityElement]::Escape($sts2Dir))</Sts2Dir>",
+            "    <Sts2DataDir>$([System.Security.SecurityElement]::Escape($sts2DataDir))</Sts2DataDir>",
+            "    <GodotExe>$([System.Security.SecurityElement]::Escape($godotExe))</GodotExe>",
+            "  </PropertyGroup>",
+            "</Project>"
+          )
+
+          Set-Content -LiteralPath "local.props" -Value $localProps -Encoding UTF8
+          "sts2_dir=$sts2Dir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore dependencies
+        run: dotnet restore $env:PROJECT_FILE
+
+      - name: Build and package mod
+        run: dotnet build $env:PROJECT_FILE --configuration Release -p:PackageModPck=true -p:RunPckExport=true
+
+      - name: Prepare release asset
+        id: asset
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          STS2_DIR_EFFECTIVE: ${{ steps.deps.outputs.sts2_dir }}
+        run: |
+          $sourceZip = Join-Path $env:STS2_DIR_EFFECTIVE "mods\$env:MOD_ID.zip"
+          if (-not (Test-Path $sourceZip)) {
+            throw "Expected package was not produced: $sourceZip"
+          }
+
+          $releaseDir = Join-Path $env:GITHUB_WORKSPACE "release"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+
+          $assetName = "$env:MOD_ID-$env:VERSION.zip"
+          $assetPath = Join-Path $releaseDir $assetName
+          Copy-Item -LiteralPath $sourceZip -Destination $assetPath -Force
+
+          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "asset_path=$assetPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.asset.outputs.asset_name }}
+          path: ${{ steps.asset.outputs.asset_path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          ASSET_NAME: ${{ steps.asset.outputs.asset_name }}
+          ASSET_PATH: ${{ steps.asset.outputs.asset_path }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch --tags
+          $existingTag = git tag --list $env:TAG
+          if ([string]::IsNullOrWhiteSpace($existingTag)) {
+            git tag $env:TAG
+            git push origin "refs/tags/$env:TAG"
+          }
+
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG "$env:ASSET_PATH#$env:ASSET_NAME" --clobber
+          } elseif ($env:PRERELEASE -eq "true") {
+            gh release create $env:TAG "$env:ASSET_PATH#$env:ASSET_NAME" --title "$env:MOD_ID $env:VERSION" --generate-notes --prerelease
+          } else {
+            gh release create $env:TAG "$env:ASSET_PATH#$env:ASSET_NAME" --title "$env:MOD_ID $env:VERSION" --generate-notes
+          }
